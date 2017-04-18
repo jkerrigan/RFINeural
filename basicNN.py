@@ -71,6 +71,7 @@ mask = mask
 #mask = expandMask(mask,5)
 #print n.shape(data)
 #print n.shape(mask)
+
 class TwoLayerNet(torch.nn.Module):
   def __init__(self, D_in, H1,H2,D_out):
     """
@@ -81,24 +82,25 @@ class TwoLayerNet(torch.nn.Module):
     self.linear1 = torch.nn.Linear(D_in, H1)
     self.linear2 = torch.nn.Linear(H1, H2)
     self.linear3 = torch.nn.Linear(H2, D_out)
-
+    #maybe add a dropout layer? see what that does
   def forward(self, x):
     """
     In the forward function we accept a Variable of input data and we must return
     a Variable of output data. We can use Modules defined in the constructor as
     well as arbitrary operators on Variables.
     """
+    drop = torch.nn.Dropout(p=0.9)
     m = torch.nn.ReLU()
     p = torch.nn.ReLU()
     h1_relu = self.linear1(x)
-    h2_relu = self.linear2(p(h1_relu))
+    h2_relu = self.linear2(p(drop(h1_relu)))
     y_pred = self.linear3(m(h2_relu))
     return y_pred
 
 
 # N is batch size; D_in is input dimension;
 # H is hidden dimension; D_out is output dimension.
-N, D_in, H1,H2, D_out = 39,1024,1024,1024,1024
+N, D_in, H1,H2, D_out = 390,1024,1024,1024,1024
 epochs = 100
 from torch.utils.data import DataLoader
 
@@ -139,20 +141,20 @@ for t in range(epochs):
 #        print x.mean()
 #        print y.mean()
         y_pred = model(x)
-        print y_pred.size()
+
 #        y_pred = y_pred.view(-1,2)
         y_pred = y_pred.float()
-        y = y.view(-1)
-        print y_pred.size(),y.size()
+        y = y.view(-1,1024)
+#        print y_pred.size(),y.size()
   #print y_pred.data.numpy()
   # Compute and print loss
         loss = criterion(y_pred, y)
         ypred = n.array(n.round(y_pred.data.numpy()))
         ynump = n.array(n.round(y.data.numpy()))
         shp = n.shape(ynump)
-        print n.shape(ypred)
-        #print (n.sum(ynump==ypred)).astype(float)/(shp[0]*shp[1])
-        acc = (n.sum(ynump==ypred)).astype(float)/(shp[0])
+
+        print (n.sum(ynump==ypred)).astype(float)/(shp[0]*shp[1])
+        acc = (n.sum(ynump==ypred)).astype(float)/(shp[0]*shp[1])
 #  print acc,'%'
 #  accuracy.append(acc)
 #  loss = log_loss(y_pred,y)
@@ -168,7 +170,6 @@ for t in range(epochs):
 #pred = y_pred[:,1].contiguous()
 pl.subplot(211)
 pl.plot(n.log10(n.array(lossArray)))
-pl.show()
 pl.subplot(212)
 pl.plot(n.array(accuracy))
 pl.show()

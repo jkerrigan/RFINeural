@@ -14,6 +14,7 @@ import optparse, sys, os
 import aipy as a
 from sklearn.externals import joblib
 import torch
+import torch.nn as nn
 from torch.autograd import Variable
 def loadFullDay():
     HERAlist = glob('/Users/josh/Desktop/HERA/data/zen.2457458.*.xx.HH.uvcUA')
@@ -39,6 +40,30 @@ def localStats(data,k,l):
         except:
             pass
     return n.var(samples)
+
+class CNN(nn.Module):
+    def __init__(self):
+        super(CNN, self).__init__()
+        self.layer1 = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=(3,25), padding=(1,12)),
+            nn.BatchNorm2d(16),
+            nn.Dropout(p=0.8),
+            nn.ReLU())
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(16, 1, kernel_size=(5,51), padding=(2,25)),
+            nn.BatchNorm2d(1),
+            nn.ReLU(),
+            nn.MaxPool2d(1))
+        self.fc = nn.Linear(1024, 2*1024)
+
+    def forward(self, x):
+        out = self.layer1(x)
+        #print out.size()                                                                                                                               
+        out = self.layer2(out)
+        out = out.view(-1, 1024).float()
+        out = self.fc(out)
+        return out
+
 
 class TwoLayerNet(torch.nn.Module):
   def __init__(self, D_in, H1,H2,D_out):
@@ -93,104 +118,9 @@ def featArray(data,times):
     #X1 = normalize(X1,norm='l2',axis=0)
     return X1
 
-def featArrayPredict(data,times,NNarr):
-    sh = n.shape(data)
-    freqs = n.linspace(100,200,sh[1])
-    X1 = n.zeros((sh[0]*sh[1],4))
-    X1[:,0] = n.real(data).reshape(sh[0]*sh[1])
-    X1[:,1] = n.imag(data).reshape(sh[0]*sh[1])
-    X1[:,2] = NNarr #n.log10(n.abs(NNvar)).reshape(sh[0]*sh[1])
-    X1[:,3] = (n.array([freqs]*sh[0])).reshape(sh[0]*sh[1])
-    #X1[:,4] = (n.array([times]*sh[1])).reshape(sh[0]*sh[1])
-    X1[n.abs(X1)>10**100] = 0
-    for m in range(X1.shape[1]):
-        X1[:,m] = X1[:,m]/n.abs(X1[:,m]).max()
-    X1 = n.nan_to_num(X1)
-    return X1
-
 def normalize(X):
     normX = (X-n.mean(X))/n.std(X)
     return normX
-
-def doStatTests(X,labels,ml):
-    pca = PCA(n_components=1)
-    pca.fit(X[labels==ml])
-    XpcaML = pca.transform(X[labels==ml])
-    labelsOut = labels
-    normXpcaML = (XpcaML-n.mean(XpcaML))/n.std(XpcaML)
-    #maxKurt = kurtosistest(normXpcaML)[1]
-    #maxSkew = skewtest(normXpcaML)[1]
-    for i in n.unique(labels):
-        if len(X[labels==i])==0:
-            continue
-        else:
-            Xpca = pca.transform(X[labels==i])
-            Xpca = (Xpca-n.mean(Xpca))/n.std(Xpca)
-            if len(Xpca) < 9:
-                labelsOut[labels==i] = -1
-                continue
-            if False:
-                if len(Xpca) < 9:
-                    labelsOut[labels==i] = -1
-                    continue
-                pl.figure()
-                if skewtest(Xpca)[1] > 0.5 or kurtosistest(Xpca)[1] > 0.5:
-                    tag = 'RFI'
-                else:
-                    tag = 'Not RFI'
-                sk = skewtest(Xpca)[1]
-                kt = kurtosistest(Xpca)[1]
-                sk1 = skewtest(XpcaML)[1]
-                kt1 = kurtosistest(XpcaML)[1]
-                pl.subplot(211)
-                pl.hist(Xpca,50,label=tag+':'+str(sk)+':'+str(kt))
-                pl.legend()
-                pl.subplot(212)
-                pl.hist(XpcaML,50,label=tag+':'+str(sk1)+':'+str(kt1))
-                pl.legend()
-                pl.show()
-            if i == ml:
-                continue
-            if skewtest(Xpca)[1] > 0.01: #or kurtosistest(Xpca)[1] > 1.:
-                labelsOut[labels==i] = -1
-            #else:
-            #    labelsOut[labels==i] = ml
-    return labelsOut
-
-def LabelMaker(newlabels):
-    ml1 = 0
-    ml1num = 0
-    for t in n.unique(newlabels):
-        if (newlabels==t).sum()>ml1num:
-            ml1 = t
-            ml1num = (newlabels==t).sum()
-    newlabels[newlabels==ml1] = -1
-    newlabels[newlabels!=-1] += 10
-    return newlabels
-
-def findMaxLabel(labels):
-    mlabel = ()
-    maxCt = 0
-    for i in n.unique(labels):
-        if (labels==i).sum() > maxCt:
-            maxCt = (labels==i).sum()
-            mlabel = i
-        else:
-            continue
-    return mlabel
-
-def findMinLabel(labels):
-    mlabel = ()
-    minCt = 10**100
-    for i in n.unique(labels):
-        if (labels==i).sum() < minCt:
-            minCt = (labels==i).sum()
-            mlabel = i
-        else:
-            continue
-    return mlabel
-
-
 
 o = optparse.OptionParser()
 opts,obs = o.parse_args(sys.argv[1:])
@@ -201,25 +131,28 @@ opts,obs = o.parse_args(sys.argv[1:])
 CL1 = []
 CL2 = []
 CL3 = []
-model = torch.load('heranet.txt')
+#model = torch.load('heranet.txt')
+cnn = torch.load('cnn.txt')
 for o in obs:
     print o
-    #try:
     uv = pyuvdata.miriad.Miriad()
     uv.read_miriad(o)
-    #except:
-    #    pass
     for b in n.unique(uv.baseline_array):
         idx = uv.baseline_array==b
         data = uv.data_array[idx,0,:,0]
         data = n.abs(n.logical_not(uv.flag_array[idx,0,:,0])*data)
         data1 = torch.Tensor(data/data.max())
         data1V = Variable(data1)
+        data1V = data1V.view(1,1,-1,1024)
         sh = n.shape(data)
         #times = uv.lst_array[idx]
         #X = featArray(data,times)
-        maskV = model(data1V)
-        mask = n.round(maskV.data.numpy())
+        maskV = cnn(data1V)
+        maskV = maskV.view(-1,2)
+        _, predicted = torch.max(maskV.data, 1)
+        maskPred = n.round(predicted.numpy())
+        print n.shape(maskPred)
+        maskPred = maskPred.reshape(sh[0],sh[1])
         #mask = clf.predict(X)
         #mask = mask.reshape(sh[0],sh[1])
         #for i in RFIlabels:
@@ -229,9 +162,9 @@ for o in obs:
         #print 'Max label:',ml
         #mask = n.zeros_like(data).astype(bool)
         #mask[labels!=ml] = True
-        mask = n.logical_not(mask.astype(bool))
-        uv.flag_array[idx,0,:,0] = mask
-        del(mask)
+        maskPred = n.logical_not(maskPred.astype(bool))
+        uv.flag_array[idx,0,:,0] = maskPred
+        del(maskPred)
 #        del(X)
     uv.write_miriad(o+'r')
     del(uv)
