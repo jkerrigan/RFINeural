@@ -45,16 +45,16 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=(3,25), padding=(1,12)),
-            nn.BatchNorm2d(16),
+            nn.Conv2d(2, 25, kernel_size=(3,25), padding=(1,12)),
+            nn.BatchNorm2d(25),
             nn.Dropout(p=0.8),
             nn.ReLU())
         self.layer2 = nn.Sequential(
-            nn.Conv2d(16, 1, kernel_size=(5,51), padding=(2,25)),
+            nn.Conv2d(25, 1, kernel_size=(5,51), padding=(2,25)),
             nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.MaxPool2d(1))
-        self.fc = nn.Linear(1024, 2*1024)
+        self.fc = nn.Linear(1024, 4*1024)
 
     def forward(self, x):
         out = self.layer1(x)
@@ -143,7 +143,7 @@ for o in obs:
         data = n.abs(n.logical_not(uv.flag_array[idx,0,:,0])*data)
         data1 = torch.Tensor(data/data.max())
         data1V = Variable(data1)
-        data1V = data1V.view(1,1,-1,1024)
+        data1V = data1V.view(1,2,-1,1024)
         sh = n.shape(data)
         #times = uv.lst_array[idx]
         #X = featArray(data,times)

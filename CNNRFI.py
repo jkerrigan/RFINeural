@@ -9,8 +9,8 @@ import pylab as pl
 from glob import glob
 
 # Hyper Parameters
-num_epochs = 10
-batch_size = 1000
+num_epochs = 1
+batch_size = 100
 learning_rate = 0.01
 
 def loadAipyData():
@@ -40,8 +40,12 @@ from torch.utils.data import DataLoader
 
 # Create random Tensors to hold inputs and outputs, and wrap them in Variables                                                                          
 from torch.utils.data import TensorDataset
-data = n.abs(data).astype(float)
-data = data/n.max(n.abs(data))
+#data = n.abs(data).astype(float)
+data = n.array([data.real,data.imag])
+mask = n.array([mask,mask])
+mask = mask.reshape(-1,1024)
+data = data.reshape(-1,1024)
+#data = data/n.max(n.abs(data))
 data1 = torch.from_numpy(data)
 mask1 = torch.from_numpy(mask)
 train_dataset = TensorDataset(data1,mask1)
@@ -55,16 +59,16 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=(3,25), padding=(1,12)),
-            nn.BatchNorm2d(16),
+            nn.Conv2d(2, 25, kernel_size=(3,25), padding=(1,12)),
+            nn.BatchNorm2d(25),
             nn.Dropout(p=0.8),
             nn.ReLU())
         self.layer2 = nn.Sequential(
-            nn.Conv2d(16, 1, kernel_size=(5,51), padding=(2,25)),
+            nn.Conv2d(25, 1, kernel_size=(5,51), padding=(2,25)),
             nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.MaxPool2d(1))
-        self.fc = nn.Linear(1024, 2*1024)
+        self.fc = nn.Linear(1024, 4*1024)
         
     def forward(self, x):
         out = self.layer1(x)
@@ -88,10 +92,10 @@ for epoch in range(num_epochs):
 #            break
         images = Variable(images).float()
         labels = Variable(labels).long().view(-1)
-        print i
+        print images.size(),labels.size()
         # Forward + Backward + Optimize
         optimizer.zero_grad()
-        images = images.view(1,1,-1,1024)
+        images = images.view(1,2,-1,1024)
         outputs = cnn(images)
         outputs = outputs.view(-1,2)
         print outputs.size(),labels.size()
@@ -108,7 +112,7 @@ correct = 0
 total = 0
 for i,(images,labels) in enumerate(test_loader):
     images = Variable(images)
-    images = images.view(1,1,-1,1024).float()
+    images = images.view(1,2,-1,1024).float()
     outputs = cnn(images)
     outputs = outputs.view(-1,2)
     _, predicted = torch.max(outputs.data, 1)
