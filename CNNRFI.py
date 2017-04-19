@@ -10,7 +10,7 @@ from glob import glob
 
 # Hyper Parameters
 num_epochs = 1
-batch_size = 100
+batch_size = 256
 learning_rate = 0.01
 
 def loadAipyData():
@@ -59,20 +59,21 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(2, 25, kernel_size=(3,25), padding=(1,12)),
-            nn.BatchNorm2d(25),
+            nn.Conv2d(2, 4*16*16, kernel_size=(3,25), padding=(1,12)),
+            nn.BatchNorm2d(4*16*16),
             nn.Dropout(p=0.8),
-            nn.ReLU())
+            nn.ReLU(),
+            nn.MaxPool2d((16,64)))
         self.layer2 = nn.Sequential(
-            nn.Conv2d(25, 1, kernel_size=(5,51), padding=(2,25)),
+            nn.Conv2d(4, 1, kernel_size=(5,51), padding=(2,25)),
             nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.MaxPool2d(1))
-        self.fc = nn.Linear(1024, 4*1024)
+        self.fc = nn.Linear(1024, 16*1024)
         
     def forward(self, x):
-        out = self.layer1(x)
-        #print out.size()
+        out = self.layer1(x).view(1,4,-1,1024)
+        print out.size()
         out = self.layer2(out)
         out = out.view(-1, 1024).float()
         out = self.fc(out)
