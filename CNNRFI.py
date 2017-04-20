@@ -41,7 +41,7 @@ def expandMask(data,mask,batch):
     expData = data
     expMask = mask
     for i in range(batch):
-        expData = n.vstack((expData,data+0.5*n.random.randn()*(n.random.randn(sh[0],sh[1])+ 1j*n.random.randint(-1,2)*n.random.randn(sh[0],sh[1]))))
+        expData = n.vstack((expData,data+0.1*n.random.randn()*(n.random.randn(sh[0],sh[1])+ 1j*n.random.randint(-1,2)*n.random.randn(sh[0],sh[1]))))
         expMask = n.vstack((expMask,mask))
     return expData,expMask
 
@@ -49,15 +49,15 @@ def injectRandomRFI(data,mask,injections):
     sh = n.shape(data)
     for i in range(injections):
         if n.abs(n.random.rand())>0.5:
-            ## RFI in time
+            ## RFI across time
             fw = n.random.randint(1,10)
-            th = n.random.randint(1,100)
+            th = n.random.randint(1,900)
             fs = n.random.randint(1,sh[1]-fw)
             ts = n.random.randint(1,sh[0]-th)
             data[ts:ts+th,fs:fs+fw] = data[ts:ts+th,fs:fs+fw]+0.1*n.random.randn()*(n.random.randn(th,fw)+ 1j*n.random.randint(-1,2)*n.random.randn(th,fw))
             mask[ts:ts+th,fs:fs+fw] = 0.
         else:
-            ## RFI in freq
+            ## RFI across freq
             fw = n.random.randint(1,100)
             th = n.random.randint(1,10)
             fs = n.random.randint(1,sh[1]-fw)
