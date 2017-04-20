@@ -45,21 +45,35 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(2, 25, kernel_size=(3,25), padding=(1,12)),
-            nn.BatchNorm2d(25),
-            nn.Dropout(p=0.8),
-            nn.ReLU())
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(25, 1, kernel_size=(5,51), padding=(2,25)),
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
             nn.BatchNorm2d(1),
-            nn.ReLU(),
-            nn.MaxPool2d(1))
-        self.fc = nn.Linear(1024, 4*1024)
+            nn.Tanh())
 
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Dropout(),
+            nn.BatchNorm2d(1),
+            nn.Tanh())
+
+        self.layer3 = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.BatchNorm2d(1),
+            nn.Tanh())
+
+        self.layer4 = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Dropout(),
+            nn.BatchNorm2d(1),
+            nn.Tanh())
+        self.fc = nn.Linear(1024, 2*1024)
+        
     def forward(self, x):
-        out = self.layer1(x)
-        #print out.size()                                                                                                                               
-        out = self.layer2(out)
+        out = self.layer1(x).view(1,1,-1,1024)
+        out = self.layer2(out).view(1,1,-1,1024)
+        out = self.layer3(out).view(1,1,-1,1024)
+        print out.size()
+        out = self.layer4(out)
+        print out.size()
         out = out.view(-1, 1024).float()
         out = self.fc(out)
         return out
@@ -132,7 +146,7 @@ CL1 = []
 CL2 = []
 CL3 = []
 #model = torch.load('heranet.txt')
-cnn = torch.load('cnn.txt')
+cnn = torch.load('DEEPcnn.txt')
 for o in obs:
     print o
     uv = pyuvdata.miriad.Miriad()
@@ -141,9 +155,9 @@ for o in obs:
         idx = uv.baseline_array==b
         data = uv.data_array[idx,0,:,0]
         data = n.abs(n.logical_not(uv.flag_array[idx,0,:,0])*data)
-        data1 = torch.Tensor(data/data.max())
+        data1 = torch.Tensor(data)
         data1V = Variable(data1)
-        data1V = data1V.view(1,2,-1,1024)
+        data1V = data1V.view(1,1,-1,1024)
         sh = n.shape(data)
         #times = uv.lst_array[idx]
         #X = featArray(data,times)

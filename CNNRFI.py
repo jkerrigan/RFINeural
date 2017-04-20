@@ -9,15 +9,17 @@ import pylab as pl
 from glob import glob
 
 # Hyper Parameters
-num_epochs = 1
-batch_size = 256
+num_epochs = 2
+batch_size = 56
 learning_rate = 0.01
 
 def loadAipyData():
-    HERAlist = glob('/Users/josh/Desktop/HERA/data/*A')
+    HERAlist = glob('/users/jkerriga/data/jkerriga/HERA/*A')
+    HERAlist = n.sort(HERAlist)
     HERAdata = []
     times = []
-    for l in ['9_10']: #,'31_105','10_105','9_31','9_105','10_31']:                                                                                    
+    for l in ['9_10']: #,'31_105','10_105','9_31','9_105','10_31']:            
+                                                                      
         data = []
         for k in HERAlist:
             uvHERA = a.miriad.UV(k)
@@ -29,23 +31,69 @@ def loadAipyData():
             HERAdata = [data]
         else:
             HERAdata.append(data)
-    print n.shape(HERAdata)
+    #print n.shape(HERAdata)
     HERAdata = n.array(HERAdata)
     times = n.array(times)
     return HERAdata,times
+
+def expandMask(data,mask,batch):
+    sh = n.shape(mask)
+    expData = data
+    expMask = mask
+    for i in range(batch):
+        expData = n.vstack((expData,data+0.5*n.random.randn()*(n.random.randn(sh[0],sh[1])+ 1j*n.random.randint(-1,2)*n.random.randn(sh[0],sh[1]))))
+        expMask = n.vstack((expMask,mask))
+    return expData,expMask
+
+def injectRandomRFI(data,mask,injections):
+    sh = n.shape(data)
+    for i in range(injections):
+        if n.abs(n.random.rand())>0.5:
+            ## RFI in time
+            fw = n.random.randint(1,10)
+            th = n.random.randint(1,100)
+            fs = n.random.randint(1,sh[1]-fw)
+            ts = n.random.randint(1,sh[0]-th)
+            data[ts:ts+th,fs:fs+fw] = data[ts:ts+th,fs:fs+fw]+0.1*n.random.randn()*(n.random.randn(th,fw)+ 1j*n.random.randint(-1,2)*n.random.randn(th,fw))
+            mask[ts:ts+th,fs:fs+fw] = 0.
+        else:
+            ## RFI in freq
+            fw = n.random.randint(1,100)
+            th = n.random.randint(1,10)
+            fs = n.random.randint(1,sh[1]-fw)
+            ts = n.random.randint(1,sh[0]-th)
+            data[ts:ts+th,fs:fs+fw] = data[ts:ts+th,fs:fs+fw]+0.1*n.random.randn()*(n.random.randn(th,fw)+ 1j*n.random.randint(-1,2)*n.random.randn(th,fw))
+            mask[ts:ts+th,fs:fs+fw] = 0.
+            
+    return data,mask
+
 data,times = loadAipyData()
 mask = n.loadtxt('trainMask_HQ.txt')
 data = n.nan_to_num(data.reshape(-1,1024))
 from torch.utils.data import DataLoader
-
-# Create random Tensors to hold inputs and outputs, and wrap them in Variables                                                                          
+sh = n.shape(data)
+#data = data[0:(sh[0] / batch_size)*batch_size,:]
+#mask = mask[0:(sh[0] / batch_size)*batch_size,:]
+print n.shape(data),n.shape(mask)
+# Create random Tensors to hold inputs and outputs, and wrap them in Variables  
+#data = n.abs(data)
+expDat,expMask = expandMask(data,mask,12)                                       
 from torch.utils.data import TensorDataset
-#data = n.abs(data).astype(float)
-data = n.array([data.real,data.imag])
-mask = n.array([mask,mask])
+data = n.vstack((data,expDat))
+mask = n.vstack((mask,expMask))
+data,mask = injectRandomRFI(data,mask,600)
+data = n.abs(data)
+pl.subplot(211)
+pl.imshow(n.log10(data),aspect='auto',interpolation='none')
+pl.subplot(212)
+pl.imshow(n.log10(data*mask),aspect='auto',interpolation='none')
+pl.show()
+#data = n.array([n.abs(data),n.angle(data)])
+#mask = n.array([mask,mask])
 mask = mask.reshape(-1,1024)
 data = data.reshape(-1,1024)
-#data = data/n.max(n.abs(data))
+#print n.shape(data)
+#data = (n.abs(data))
 data1 = torch.from_numpy(data)
 mask1 = torch.from_numpy(mask)
 train_dataset = TensorDataset(data1,mask1)
@@ -59,22 +107,35 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(2, 4*16*16, kernel_size=(3,25), padding=(1,12)),
-            nn.BatchNorm2d(4*16*16),
-            nn.Dropout(p=0.8),
-            nn.ReLU(),
-            nn.MaxPool2d((16,64)))
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(4, 1, kernel_size=(5,51), padding=(2,25)),
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
             nn.BatchNorm2d(1),
-            nn.ReLU(),
-            nn.MaxPool2d(1))
-        self.fc = nn.Linear(1024, 16*1024)
+            nn.Tanh())
+
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Dropout(),
+            nn.BatchNorm2d(1),
+            nn.Tanh())
+
+        self.layer3 = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.BatchNorm2d(1),
+            nn.Tanh())
+
+        self.layer4 = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Dropout(),
+            nn.BatchNorm2d(1),
+            nn.Tanh())
+        self.fc = nn.Linear(1024, 2*1024)
         
     def forward(self, x):
-        out = self.layer1(x).view(1,4,-1,1024)
+        out = self.layer1(x).view(1,1,-1,1024)
+        out = self.layer2(out).view(1,1,-1,1024)
+        out = self.layer3(out).view(1,1,-1,1024)
         print out.size()
-        out = self.layer2(out)
+        out = self.layer4(out)
+        print out.size()
         out = out.view(-1, 1024).float()
         out = self.fc(out)
         return out
@@ -84,41 +145,42 @@ cnn = CNN()
 
 # Loss and Optimizer
 criterion = nn.CrossEntropyLoss()
+#criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(cnn.parameters(), lr=learning_rate)
 
 # Train the Model
 for epoch in range(num_epochs):
     for i, (images, labels) in enumerate(train_loader):
-#        if i>9:
-#            break
         images = Variable(images).float()
         labels = Variable(labels).long().view(-1)
         print images.size(),labels.size()
         # Forward + Backward + Optimize
         optimizer.zero_grad()
-        images = images.view(1,2,-1,1024)
+        images = images.view(1,1,-1,1024)
         outputs = cnn(images)
+#        outputs = outputs.view(-1)
         outputs = outputs.view(-1,2)
         print outputs.size(),labels.size()
-        loss = criterion(outputs, labels)
+        loss = criterion(outputs.float(), labels.long())
         loss.backward()
         optimizer.step()
         
         #if (i+1) % 100 == 0:
         print ('Epoch [%d/%d], Iter [%d/%d] Loss: %.4f' %(epoch+1, num_epochs, i+1, len(train_dataset)//batch_size, loss.data[0]))
-
+torch.save(cnn, 'DEEPcnn.txt')
 # Test the Model
 cnn.eval()  # Change model to 'eval' mode (BN uses moving mean/var).
 correct = 0
 total = 0
 for i,(images,labels) in enumerate(test_loader):
     images = Variable(images)
-    images = images.view(1,2,-1,1024).float()
+    images = images.view(1,1,-1,1024).float()
     outputs = cnn(images)
+#    predicted = outputs.view(-1)
     outputs = outputs.view(-1,2)
     _, predicted = torch.max(outputs.data, 1)
-    total += labels.size(0)
-    print predicted.size(),labels.size()
+    total += predicted.size(0)
+#    print predicted.size(),labels.size()
     correct += (predicted.int() == labels.int()).sum()
 
 print('Test Accuracy of the model on the 10000 test images: %d %%' % (100 * correct / total))
@@ -128,13 +190,13 @@ labels = labels.view(-1,1024)
 pl.subplot(211)
 pl.imshow(n.abs(labels.numpy()),aspect='auto')
 pl.subplot(212)
-pl.imshow(n.abs(predicted.numpy()),aspect='auto')
+pl.imshow(n.abs(n.round(predicted.numpy())),aspect='auto')
 pl.show()
 images = images.view(-1,1024).data.numpy()
 pl.subplot(211)
-pl.imshow(n.log10(n.abs(images))*n.abs(predicted.numpy()),aspect='auto',cmap='jet')
+pl.imshow(n.log10(n.abs(images*n.round(predicted.numpy()))),aspect='auto',cmap='jet')
 pl.subplot(212)
 pl.imshow(n.log10(n.abs(images)),aspect='auto',cmap='jet')
 pl.show()
 # Save the Trained Model
-torch.save(cnn, 'cnn.txt')
+#torch.save(cnn, 'DEEPcnn.txt')
