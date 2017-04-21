@@ -7,11 +7,13 @@ import numpy as n
 import aipy as a
 import pylab as pl
 from glob import glob
+from scipy import signal
+from scipy.signal import medfilt
 
 # Hyper Parameters
-num_epochs = 2
+num_epochs = 10
 batch_size = 56
-learning_rate = 0.01
+learning_rate = 0.001
 
 def loadAipyData():
     HERAlist = glob('/users/jkerriga/data/jkerriga/HERA/*A')
@@ -41,7 +43,7 @@ def expandMask(data,mask,batch):
     expData = data
     expMask = mask
     for i in range(batch):
-        expData = n.vstack((expData,data+0.1*n.random.randn()*(n.random.randn(sh[0],sh[1])+ 1j*n.random.randint(-1,2)*n.random.randn(sh[0],sh[1]))))
+        expData = n.vstack((expData,data+0.01*n.random.randn()*(n.random.randn(sh[0],sh[1])+ 1j*n.random.randint(-1,2)*n.random.randn(sh[0],sh[1]))))
         expMask = n.vstack((expMask,mask))
     return expData,expMask
 
@@ -54,7 +56,7 @@ def injectRandomRFI(data,mask,injections):
             th = n.random.randint(1,900)
             fs = n.random.randint(1,sh[1]-fw)
             ts = n.random.randint(1,sh[0]-th)
-            data[ts:ts+th,fs:fs+fw] = data[ts:ts+th,fs:fs+fw]+0.1*n.random.randn()*(n.random.randn(th,fw)+ 1j*n.random.randint(-1,2)*n.random.randn(th,fw))
+            data[ts:ts+th,fs:fs+fw] = data[ts:ts+th,fs:fs+fw]+0.01*n.random.randn()*(n.random.randn(th,fw)+ 1j*n.random.randint(-1,2)*n.random.randn(th,fw))
             mask[ts:ts+th,fs:fs+fw] = 0.
         else:
             ## RFI across freq
@@ -62,10 +64,18 @@ def injectRandomRFI(data,mask,injections):
             th = n.random.randint(1,10)
             fs = n.random.randint(1,sh[1]-fw)
             ts = n.random.randint(1,sh[0]-th)
-            data[ts:ts+th,fs:fs+fw] = data[ts:ts+th,fs:fs+fw]+0.1*n.random.randn()*(n.random.randn(th,fw)+ 1j*n.random.randint(-1,2)*n.random.randn(th,fw))
+            data[ts:ts+th,fs:fs+fw] = data[ts:ts+th,fs:fs+fw]+0.01*n.random.randn()*(n.random.randn(th,fw)+ 1j*n.random.randint(-1,2)*n.random.randn(th,fw))
             mask[ts:ts+th,fs:fs+fw] = 0.
             
     return data,mask
+
+def corrPass(data1,data2):
+    cCout = n.zeros_like(data1)
+    for i in range(n.shape(data1)[1]):
+        a = data1[:,i]
+        b = data2[:,i]
+        cCout[:,i] = signal.correlate(a,b,mode='same')
+    return cCout
 
 data,times = loadAipyData()
 mask = n.loadtxt('trainMask_HQ.txt')
@@ -77,12 +87,14 @@ sh = n.shape(data)
 print n.shape(data),n.shape(mask)
 # Create random Tensors to hold inputs and outputs, and wrap them in Variables  
 #data = n.abs(data)
-expDat,expMask = expandMask(data,mask,12)                                       
+expDat,expMask = expandMask(data,mask,10)                                       
 from torch.utils.data import TensorDataset
 data = n.vstack((data,expDat))
 mask = n.vstack((mask,expMask))
-data,mask = injectRandomRFI(data,mask,600)
+data,mask = injectRandomRFI(data,mask,200)
+
 data = n.abs(data)
+data = medfilt(data)
 pl.subplot(211)
 pl.imshow(n.log10(data),aspect='auto',interpolation='none')
 pl.subplot(212)
@@ -107,32 +119,32 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
-            nn.BatchNorm2d(1),
+            nn.Conv2d(1, 16, kernel_size=(3,3), padding=(1,1)),
+            nn.BatchNorm2d(16),
             nn.Tanh())
 
         self.layer2 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Conv2d(16, 32, kernel_size=(3,3), padding=(1,1)),
             nn.Dropout(),
-            nn.BatchNorm2d(1),
+            nn.BatchNorm2d(32),
             nn.Tanh())
 
         self.layer3 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
-            nn.BatchNorm2d(1),
+            nn.Conv2d(32, 64, kernel_size=(3,3), padding=(1,1)),
+            nn.BatchNorm2d(64),
             nn.Tanh())
 
         self.layer4 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Conv2d(64, 1, kernel_size=(3,3), padding=(1,1)),
             nn.Dropout(),
             nn.BatchNorm2d(1),
             nn.Tanh())
         self.fc = nn.Linear(1024, 2*1024)
         
     def forward(self, x):
-        out = self.layer1(x).view(1,1,-1,1024)
-        out = self.layer2(out).view(1,1,-1,1024)
-        out = self.layer3(out).view(1,1,-1,1024)
+        out = self.layer1(x).view(1,16,-1,1024)
+        out = self.layer2(out).view(1,32,-1,1024)
+        out = self.layer3(out).view(1,64,-1,1024)
         print out.size()
         out = self.layer4(out)
         print out.size()
@@ -147,7 +159,8 @@ cnn = CNN()
 criterion = nn.CrossEntropyLoss()
 #criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(cnn.parameters(), lr=learning_rate)
-
+loss_array = []
+correct = []
 # Train the Model
 for epoch in range(num_epochs):
     for i, (images, labels) in enumerate(train_loader):
@@ -164,14 +177,18 @@ for epoch in range(num_epochs):
         loss = criterion(outputs.float(), labels.long())
         loss.backward()
         optimizer.step()
-        
+        loss_array.append(loss.data[0])
+        _, predicted = torch.max(outputs.data, 1)
+        correct.append(1.0*(predicted.int()==labels.data.int()).sum()/labels.size()[0])
         #if (i+1) % 100 == 0:
         print ('Epoch [%d/%d], Iter [%d/%d] Loss: %.4f' %(epoch+1, num_epochs, i+1, len(train_dataset)//batch_size, loss.data[0]))
 torch.save(cnn, 'DEEPcnn.txt')
 # Test the Model
 cnn.eval()  # Change model to 'eval' mode (BN uses moving mean/var).
-correct = 0
+correct_test = 0
 total = 0
+ct_array = []
+ct_totarray = []
 for i,(images,labels) in enumerate(test_loader):
     images = Variable(images)
     images = images.view(1,1,-1,1024).float()
@@ -180,10 +197,20 @@ for i,(images,labels) in enumerate(test_loader):
     outputs = outputs.view(-1,2)
     _, predicted = torch.max(outputs.data, 1)
     total += predicted.size(0)
+    ct_totarray.append(total)
 #    print predicted.size(),labels.size()
-    correct += (predicted.int() == labels.int()).sum()
+    correct_test += 1.0*(predicted.int() == labels.int()).sum()
+    ct_array.append(correct_test)
 
-print('Test Accuracy of the model on the 10000 test images: %d %%' % (100 * correct / total))
+print n.array(ct_array)/n.array(ct_totarray)
+pl.subplot(211)
+pl.plot(loss_array)
+pl.subplot(212)
+pl.plot(correct)
+pl.plot(n.array(ct_array)/n.array(ct_totarray),'r')
+pl.savefig('losscorr.png')
+
+#print('Test Accuracy of the model on the 10000 test images: %d %%' % (100 * correct / total))
 
 predicted = predicted.view(-1,1024)
 labels = labels.view(-1,1024)

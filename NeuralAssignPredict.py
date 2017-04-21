@@ -1,12 +1,7 @@
 import os
 import numpy as n
-from scipy import signal
-from sklearn import mixture
-from sklearn import cluster
-from scipy.signal import cwt
-from scipy.stats import skewtest,kurtosistest
-from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA
+from scipy.signal import medfilt
+
 from glob import glob
 import pyuvdata
 import pylab as pl
@@ -45,38 +40,39 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
-            nn.BatchNorm2d(1),
+            nn.Conv2d(1, 16, kernel_size=(3,3), padding=(1,1)),
+            nn.BatchNorm2d(16),
             nn.Tanh())
 
         self.layer2 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Conv2d(16, 32, kernel_size=(3,3), padding=(1,1)),
             nn.Dropout(),
-            nn.BatchNorm2d(1),
+            nn.BatchNorm2d(32),
             nn.Tanh())
 
         self.layer3 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
-            nn.BatchNorm2d(1),
+            nn.Conv2d(32, 64, kernel_size=(3,3), padding=(1,1)),
+            nn.BatchNorm2d(64),
             nn.Tanh())
 
         self.layer4 = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size=(3,3), padding=(1,1)),
+            nn.Conv2d(64, 1, kernel_size=(3,3), padding=(1,1)),
             nn.Dropout(),
             nn.BatchNorm2d(1),
             nn.Tanh())
         self.fc = nn.Linear(1024, 2*1024)
         
     def forward(self, x):
-        out = self.layer1(x).view(1,1,-1,1024)
-        out = self.layer2(out).view(1,1,-1,1024)
-        out = self.layer3(out).view(1,1,-1,1024)
+        out = self.layer1(x).view(1,16,-1,1024)
+        out = self.layer2(out).view(1,32,-1,1024)
+        out = self.layer3(out).view(1,64,-1,1024)
         print out.size()
         out = self.layer4(out)
         print out.size()
         out = out.view(-1, 1024).float()
         out = self.fc(out)
         return out
+        
 
 
 class TwoLayerNet(torch.nn.Module):
@@ -155,6 +151,7 @@ for o in obs:
         idx = uv.baseline_array==b
         data = uv.data_array[idx,0,:,0]
         data = n.abs(n.logical_not(uv.flag_array[idx,0,:,0])*data)
+        data = medfilt(data)
         data1 = torch.Tensor(data)
         data1V = Variable(data1)
         data1V = data1V.view(1,1,-1,1024)
