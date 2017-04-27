@@ -37,68 +37,45 @@ def localStats(data,k,l):
     return n.var(samples)
 
 class CNN(nn.Module):
-    def __init__(self):
+    def __init__(self,dropRate):
+        self.dropRate = dropRate
         super(CNN, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=(3,3), padding=(1,1)),
-            nn.BatchNorm2d(16),
+            nn.BatchNorm2d(1),
+            nn.Conv2d(1, 2, kernel_size=5, padding=2),
+            nn.BatchNorm2d(2),
+            #nn.Dropout(p=self.dropRate),
             nn.Tanh())
 
         self.layer2 = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=(3,3), padding=(1,1)),
-            nn.Dropout(),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(2, 2, kernel_size=11, padding=5),
+            nn.BatchNorm2d(2),
             nn.Tanh())
 
         self.layer3 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=(3,3), padding=(1,1)),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(2, 2, kernel_size=11, padding=5),
+            nn.BatchNorm2d(2),
+            nn.Dropout(p=self.dropRate),
             nn.Tanh())
 
         self.layer4 = nn.Sequential(
-            nn.Conv2d(64, 1, kernel_size=(3,3), padding=(1,1)),
-            nn.Dropout(),
+            nn.Conv2d(2, 1, kernel_size=5, padding=2),
             nn.BatchNorm2d(1),
             nn.Tanh())
+
+        self.layer5 = nn.Sequential(
+            nn.Linear(1024,1024),
+            nn.Tanh())
         self.fc = nn.Linear(1024, 2*1024)
-        
+
     def forward(self, x):
-        out = self.layer1(x).view(1,16,-1,1024)
-        out = self.layer2(out).view(1,32,-1,1024)
-        out = self.layer3(out).view(1,64,-1,1024)
-        print out.size()
-        out = self.layer4(out)
-        print out.size()
-        out = out.view(-1, 1024).float()
+        out = self.layer1(x).view(1,2,-1,1024)
+        out = self.layer2(out).view(1,2,-1,1024)
+        out = self.layer3(out).view(1,2,-1,1024)
+        out = self.layer4(out).view(-1,1024).float()
+        out = self.layer5(out).view(-1,1024).float()
         out = self.fc(out)
         return out
-        
-
-
-class TwoLayerNet(torch.nn.Module):
-  def __init__(self, D_in, H1,H2,D_out):
-    """                                                                                                                                                 
-    In the constructor we instantiate two nn.Linear modules and assign them as                                                                          
-    member variables.                                                                                                                                   
-    """
-    super(TwoLayerNet, self).__init__()
-    self.linear1 = torch.nn.Linear(D_in, H1)
-    self.linear2 = torch.nn.Linear(H1, H2)
-    self.linear3 = torch.nn.Linear(H2, D_out)
-
-  def forward(self, x):
-    """                                                                                                                                                 
-    In the forward function we accept a Variable of input data and we must return                                                                       
-    a Variable of output data. We can use Modules defined in the constructor as                                                                         
-    well as arbitrary operators on Variables.                                                                                                           
-    """
-    m = torch.nn.ReLU()
-    p = torch.nn.ReLU()
-    h1_relu = self.linear1(x)
-    h2_relu = self.linear2(p(h1_relu))
-    y_pred = self.linear3(m(h2_relu))
-    return y_pred
-
 
 def corrPass(data1,data2):
     cCout = n.zeros_like(data1)
@@ -143,6 +120,7 @@ CL2 = []
 CL3 = []
 #model = torch.load('heranet.txt')
 cnn = torch.load('DEEPcnn.txt')
+cnn.eval()
 for o in obs:
     print o
     uv = pyuvdata.miriad.Miriad()
@@ -151,7 +129,7 @@ for o in obs:
         idx = uv.baseline_array==b
         data = uv.data_array[idx,0,:,0]
         data = n.abs(n.logical_not(uv.flag_array[idx,0,:,0])*data)
-        data = medfilt(data)
+        data = (data-n.median(data))/n.max(data)
         data1 = torch.Tensor(data)
         data1V = Variable(data1)
         data1V = data1V.view(1,1,-1,1024)
