@@ -17,11 +17,11 @@ batch_size = 1
 learning_rate = 10**(-3)
 
 def loadAipyData():
-    HERAlist = glob('/Users/josh/Desktop/HERA/data/*A')
+    HERAlist = glob('/users/jkerriga/data/jkerriga/HERA/*U')
     HERAlist = n.sort(HERAlist)
     HERAdata = []
     times = []
-    for l in ['9_10']: #,'31_105','10_105','9_31','9_105','10_31']:            
+    for l in ['9_10','9_105','9_31','31_105','10_31','10_105','20_105']:        
                                                                       
         data = []
         for k in HERAlist:
@@ -30,10 +30,11 @@ def loadAipyData():
             for p,d,f in uvHERA.all(raw=True):
                 data.append(d)
                 times.append(uvHERA['lst'])
+        data = n.array(data)
         if l == '9_10':
-            HERAdata = [data]
+            HERAdata = [data[0:3900,:]]
         else:
-            HERAdata.append(data)
+            HERAdata.append(data[0:3900,:])
     #print n.shape(HERAdata)
     HERAdata = n.array(HERAdata)
     times = n.array(times)
@@ -44,7 +45,7 @@ def expandMask(data,mask,batch):
     expData = data
     expMask = mask
     for i in range(batch):
-        expData = n.vstack((expData,data+0.001*n.random.randn()*(n.random.randn(sh[0],sh[1])+ 1j*n.random.randint(-1,2)*n.random.randn(sh[0],sh[1]))))
+        #expData = n.vstack((expData,data+0.001*n.random.randn()*(n.random.randn(sh[0],sh[1])+ 1j*n.random.randint(-1,2)*n.random.randn(sh[0],sh[1]))))
         expMask = n.vstack((expMask,mask))
     return expData,expMask
 
@@ -78,10 +79,17 @@ def corrPass(data1,data2):
         cCout[:,i] = signal.correlate(a,b,mode='same')
     return cCout
 
+def ObsMedian(data):
+    sh = n.shape(data)
+    for i in range(sh[0]/50):
+        data[i*50:(i+1)*50] = (data[i*50:(i+1)*50]-n.median(data[i*50:(i+1)*50]))/n.std(data[i*50:(i+1)*50])
+    return data
+
 data,times = loadAipyData()
 data = data.reshape(-1,1024)
+print n.shape(data)
 XRFImask = xrfi.xrfi_simple(data)
-data = data[0:3900,:]
+#data = data[0:3900,:]
 
 mask = n.loadtxt('trainMask_HQ.txt')[0:3900,:]*n.logical_not(XRFImask[0:3900,:]).astype(int) 
 data = n.nan_to_num(data.reshape(-1,1024))
@@ -89,14 +97,15 @@ from torch.utils.data import DataLoader
 sh = n.shape(data)
 print n.shape(data),n.shape(mask)
 # Create random Tensors to hold inputs and outputs, and wrap them in Variables  
-data,mask = expandMask(data,mask,1)                                       
+data,mask = expandMask(data,mask,6)                                       
 from torch.utils.data import TensorDataset
 #data = n.vstack((data,expDat))
 #mask = n.vstack((mask,expMask))
 #data,mask = injectRandomRFI(data,mask,300)
 
 data = n.abs(data)
-data = (data-n.median(data))/n.max(data)
+#data = (data-n.median(data))/n.std(data)
+data = n.abs(ObsMedian(data))
 pl.subplot(211)
 pl.imshow(n.log10(data),aspect='auto',interpolation='none')
 pl.subplot(212)
@@ -104,8 +113,8 @@ pl.imshow(n.log10(data*mask),aspect='auto',interpolation='none')
 pl.show()
 #data = n.array([n.abs(data),n.angle(data)])
 #mask = n.array([mask,mask])
-mask = mask.reshape(78,-1,1024)
-data = data.reshape(78,-1,1024)
+mask = mask.reshape(7*78,-1,1024)
+data = data.reshape(7*78,-1,1024)
 #print n.shape(data)
 #data = (n.abs(data))
 data1 = torch.from_numpy(data)
@@ -135,8 +144,8 @@ class CNN(nn.Module):
 
         self.layer3 = nn.Sequential(
             nn.Conv2d(2, 2, kernel_size=11, padding=5),
+            nn.Dropout2d(p=self.dropRate),
             nn.BatchNorm2d(2),
-            nn.Dropout(p=self.dropRate),
             nn.Tanh())
         
         self.layer4 = nn.Sequential(

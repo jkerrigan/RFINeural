@@ -129,7 +129,7 @@ for o in obs:
         idx = uv.baseline_array==b
         data = uv.data_array[idx,0,:,0]
         data = n.abs(n.logical_not(uv.flag_array[idx,0,:,0])*data)
-        data = (data-n.median(data))/n.max(data)
+        data = n.abs((data-n.median(data))/n.std(data))
         data1 = torch.Tensor(data)
         data1V = Variable(data1)
         data1V = data1V.view(1,1,-1,1024)
