@@ -12,7 +12,7 @@ from scipy import signal
 from scipy.signal import medfilt
 
 # Hyper Parameters
-num_epochs = 30
+num_epochs = 5
 batch_size = 1
 learning_rate = 0.000316 #10**(-4)
 
@@ -141,14 +141,14 @@ class CNN(nn.Module):
 
         self.layer1 = nn.Sequential(
             nn.BatchNorm2d(1),
-            nn.Conv2d(1, 16*1, kernel_size=7, padding=3),
+            nn.Conv2d(1, 16*1, kernel_size=5, padding=2),
             nn.BatchNorm2d(16*1),
             nn.MaxPool2d(kernel_size=(1,16)),
             #nn.Dropout(p=self.dropRate),
             nn.ReLU())
 
         self.layer2 = nn.Sequential(
-            nn.Conv2d(1*16, 2*16, kernel_size=7, padding=3),
+            nn.Conv2d(1*16, 2*16, kernel_size=5, padding=2),
             nn.BatchNorm2d(2*16),
             #nn.Dropout2d(p=self.dropRate),
             nn.MaxPool2d(kernel_size=(2,1)),
@@ -172,7 +172,7 @@ class CNN(nn.Module):
             nn.ReLU())
         
         self.layer6 = nn.Sequential(
-            nn.Conv2d(2*16, 2*16, kernel_size=7, padding=3),
+            nn.Conv2d(2*16, 2*16, kernel_size=5, padding=2),
             nn.BatchNorm2d(2*16),
             nn.Dropout2d(p=self.dropRate),
             nn.ReLU())
