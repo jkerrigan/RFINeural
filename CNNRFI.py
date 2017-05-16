@@ -12,16 +12,16 @@ from scipy import signal
 from scipy.signal import medfilt
 
 # Hyper Parameters
-num_epochs = 5
+num_epochs = 1000
 batch_size = 1
 learning_rate = 0.000316 #10**(-4)
 
 def loadAipyData():
-    HERAlist = glob('/users/jkerriga/data/jkerriga/HERA/*U')
+    HERAlist = glob('/users/jkerriga/data/jkerriga/HERA2/lst.*.*.HH.uv')
     HERAlist = n.sort(HERAlist)
     HERAdata = []
     times = []
-    for l in ['9_10']: #,'31_105','10_31','10_105','20_105']:        
+    for l in ['9_10']: #,'31_105','10_31']: #,'10_105','20_105']:        
                                                                       
         data = []
         for k in HERAlist:
@@ -95,10 +95,10 @@ def NormByObs(data):
 data,times = loadAipyData()
 data = data.reshape(-1,1024)
 print n.shape(data)
-XRFImask = xrfi.xrfi_simple(data)
+XRFImask = xrfi.xrfi_simple(data,nsig_df=20,nsig_dt=20,nsig_all=25)
 #data = data[0:3900,:]
 
-mask = n.logical_not(XRFImask[0:3900,:]).astype(int)*n.loadtxt('trainMask_HQ.txt')[0:3900,:]
+mask = n.loadtxt('trainMask_HQ.txt')[0:3900,:] #n.logical_not(XRFImask[0:3900,:]).astype(int)*n.loadtxt('trainMask_HQ.txt')[0:3900,:]
 data = n.nan_to_num(data.reshape(-1,1024))
 from torch.utils.data import DataLoader
 sh = n.shape(data)
@@ -108,17 +108,17 @@ print n.shape(data),n.shape(mask)
 from torch.utils.data import TensorDataset
 #data = n.vstack((data,expDat))
 #mask = n.vstack((mask,expMask))
-#data,mask = injectRandomRFI(data,mask,1000)
+#data,mask = injectRandomRFI(data,mask,400)
 
 data = n.abs(data)
 data = NormByObs(data)
 #data = (data-n.median(data))/n.std(data)
 #data = n.abs(ObsMedian(data))
-#pl.subplot(211)
-#pl.imshow(n.log10(data),aspect='auto',interpolation='none')
-#pl.subplot(212)
-#pl.imshow(n.log10(data*mask),aspect='auto',interpolation='none')
-#pl.show()
+pl.subplot(211)
+pl.imshow(n.log10(data),aspect='auto',interpolation='none')
+pl.subplot(212)
+pl.imshow(n.log10(data*mask),aspect='auto',interpolation='none')
+pl.show()
 #data = n.array([n.abs(data),n.angle(data)])
 #mask = n.array([mask,mask])
 mask = mask.reshape(1*78,-1,1024)
@@ -155,20 +155,20 @@ class CNN(nn.Module):
             nn.ReLU())
 
         self.layer3 = nn.Sequential(
-            nn.Conv2d(2*32, 2*32, kernel_size=19, padding=9),
+            nn.Conv2d(2*16, 2*32, kernel_size=5, padding=2),
             nn.BatchNorm2d(2*32),
             #nn.MaxPool2d(kernel_size=(1,2)),
             nn.ReLU())
 
         self.layer4 = nn.Sequential(
-            nn.Conv2d(2*16, 2*16, kernel_size=7, padding=3),
+            nn.Conv2d(2*32, 2*16, kernel_size=5, padding=2),
             #nn.Dropout2d(p=self.dropRate),
             nn.BatchNorm2d(2*16),
             nn.ReLU())
 
         self.layer5 = nn.Sequential(
-            nn.Conv2d(2*8*4, 2*8*4, kernel_size=7, padding=3),
-            nn.BatchNorm2d(2*8*4),
+            nn.Conv2d(2*8*2, 2*8*2, kernel_size=5, padding=2),
+            nn.BatchNorm2d(2*8*2),
             nn.ReLU())
         
         self.layer6 = nn.Sequential(
@@ -194,9 +194,9 @@ class CNN(nn.Module):
     def forward(self, x):
         out = self.layer1(x).view(1,16,-1,1024/16)
         out = self.layer2(out).view(1,2*16,-1,1024/16)
-        #out = self.layer3(out).view(1,2*16,-1,1024/16)
-        #out = self.layer4(out).view(1,2*16,-1,1024/16)
-        #out = self.layer5(out).view(1,2*8*4,-1,1024)
+        out = self.layer3(out).view(1,2*32,-1,1024/16)
+        out = self.layer4(out).view(1,2*16,-1,1024/16)
+        out = self.layer5(out).view(1,2*16,-1,1024/16)
         out = self.layer6(out).view(-1,1024).float()
         out = self.layer6_5(out).view(-1,1024).float()
         out = self.layer7(out).view(-1,1024).float()
@@ -205,7 +205,7 @@ class CNN(nn.Module):
         out = self.fc(out)
         return out
         
-cnn = CNN(0.225)
+cnn = CNN(0.8)
 
 # Loss and Optimizer
 criterion = nn.CrossEntropyLoss()

@@ -43,38 +43,38 @@ class CNN(nn.Module):
 
         self.layer1 = nn.Sequential(
             nn.BatchNorm2d(1),
-            nn.Conv2d(1, 16*1, kernel_size=7, padding=3),
+            nn.Conv2d(1, 16*1, kernel_size=5, padding=2),
             nn.BatchNorm2d(16*1),
             nn.MaxPool2d(kernel_size=(1,16)),
             #nn.Dropout(p=self.dropRate),
             nn.ReLU())
 
         self.layer2 = nn.Sequential(
-            nn.Conv2d(1*16, 2*16, kernel_size=7, padding=3),
+            nn.Conv2d(1*16, 2*16, kernel_size=5, padding=2),
             nn.BatchNorm2d(2*16),
             #nn.Dropout2d(p=self.dropRate),
             nn.MaxPool2d(kernel_size=(2,1)),
             nn.ReLU())
 
         self.layer3 = nn.Sequential(
-            nn.Conv2d(2*32, 2*32, kernel_size=19, padding=9),
+            nn.Conv2d(2*16, 2*32, kernel_size=5, padding=2),
             nn.BatchNorm2d(2*32),
             #nn.MaxPool2d(kernel_size=(1,2)),
             nn.ReLU())
 
         self.layer4 = nn.Sequential(
-            nn.Conv2d(2*16, 2*16, kernel_size=7, padding=3),
+            nn.Conv2d(2*32, 2*16, kernel_size=5, padding=2),
             #nn.Dropout2d(p=self.dropRate),
             nn.BatchNorm2d(2*16),
             nn.ReLU())
 
         self.layer5 = nn.Sequential(
-            nn.Conv2d(2*8*4, 2*8*4, kernel_size=7, padding=3),
-            nn.BatchNorm2d(2*8*4),
+            nn.Conv2d(2*8*2, 2*8*2, kernel_size=5, padding=2),
+            nn.BatchNorm2d(2*8*2),
             nn.ReLU())
         
         self.layer6 = nn.Sequential(
-            nn.Conv2d(2*16, 2*16, kernel_size=7, padding=3),
+            nn.Conv2d(2*16, 2*16, kernel_size=5, padding=2),
             nn.BatchNorm2d(2*16),
             nn.Dropout2d(p=self.dropRate),
             nn.ReLU())
@@ -96,9 +96,9 @@ class CNN(nn.Module):
     def forward(self, x):
         out = self.layer1(x).view(1,16,-1,1024/16)
         out = self.layer2(out).view(1,2*16,-1,1024/16)
-        #out = self.layer3(out).view(1,2*16,-1,1024/16)
-        #out = self.layer4(out).view(1,2*16,-1,1024/16)
-        #out = self.layer5(out).view(1,2*8*4,-1,1024)
+        out = self.layer3(out).view(1,2*32,-1,1024/16)
+        out = self.layer4(out).view(1,2*16,-1,1024/16)
+        out = self.layer5(out).view(1,2*16,-1,1024/16)
         out = self.layer6(out).view(-1,1024).float()
         out = self.layer6_5(out).view(-1,1024).float()
         out = self.layer7(out).view(-1,1024).float()
